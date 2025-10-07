@@ -19,7 +19,7 @@ export interface ChatMessage {
   content: string;
 }
 
-export type CheckoutPhase = 'browsing' | 'confirming' | 'processing' | 'complete';
+export type CheckoutPhase = 'browsing' | 'confirming' | 'authorizing' | 'processing' | 'complete';
 
 export interface Order {
   id: string;

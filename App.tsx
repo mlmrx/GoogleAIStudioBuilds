@@ -19,7 +19,7 @@ const App: React.FC = () => {
   useEffect(() => {
     setChatHistory([{ 
       sender: 'agent', 
-      content: "Welcome to the Agentic Commerce Protocol. I'm your AI shopping assistant. How can I help you today? You can ask me to find products, add them to your cart, or view your cart." 
+      content: "Welcome. I'm your personal shopping assistant for Apple products. How can I help you find the perfect device today? You can ask me to find products, add them to your cart, or view your cart." 
     }]);
   }, []);
 
@@ -127,22 +127,27 @@ const App: React.FC = () => {
   };
 
   const handleConfirmAndPay = () => {
-    setCheckoutPhase('processing');
-    addAgentMessage("Thank you. I'm now securely processing your payment with the merchant. This may take a moment.");
-    
+    setCheckoutPhase('authorizing');
+    addAgentMessage("Thank you. To protect your payment details, I'm now creating a secure, single-use token for this transaction. This is part of the Agentic Commerce Protocol.");
+
     setTimeout(() => {
-      const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-      const order: Order = {
-        id: `ACP-${Date.now()}`,
-        items: [...cart],
-        total,
-        date: new Date(),
-      };
-      setCompletedOrder(order);
-      setCheckoutPhase('complete');
-      addAgentMessage(`Success! Your payment is complete. Your order #${order.id} has been confirmed. Thank you for your purchase!`);
-      setCart([]);
-    }, 2500);
+      setCheckoutPhase('processing');
+      addAgentMessage("Secure token created. I'm now processing your payment with the merchant. This may take a moment.");
+      
+      setTimeout(() => {
+        const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        const order: Order = {
+          id: `ACP-${Date.now()}`,
+          items: [...cart],
+          total,
+          date: new Date(),
+        };
+        setCompletedOrder(order);
+        setCheckoutPhase('complete');
+        addAgentMessage(`Success! Your payment is complete. Your order #${order.id} has been confirmed. Thank you for your purchase!`);
+        setCart([]);
+      }, 2500);
+    }, 2000);
   };
   
   const handleCancelCheckout = () => {
@@ -202,20 +207,20 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="bg-slate-900 text-slate-200 min-h-screen font-sans">
+    <div className="bg-gray-100 text-gray-800 min-h-screen font-sans">
       <Header />
       <main className="container mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-80px)]">
-        <div className="lg:col-span-4 xl:col-span-3 h-full overflow-y-auto bg-slate-800/50 rounded-lg p-4 ring-1 ring-white/10">
+        <div className="lg:col-span-4 xl:col-span-3 h-full overflow-y-auto bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
           <ProductGrid products={filteredProducts} />
         </div>
-        <div className="lg:col-span-5 xl:col-span-6 h-full flex flex-col bg-slate-800/50 rounded-lg ring-1 ring-white/10">
+        <div className="lg:col-span-5 xl:col-span-6 h-full flex flex-col bg-white border border-gray-200 rounded-xl shadow-sm">
           <AgentPanel 
             chatHistory={chatHistory} 
             onSendMessage={handleUserMessage} 
             isLoading={isLoading} 
           />
         </div>
-        <div className="lg:col-span-3 xl:col-span-3 h-full overflow-y-auto bg-slate-800/50 rounded-lg p-4 ring-1 ring-white/10">
+        <div className="lg:col-span-3 xl:col-span-3 h-full overflow-y-auto bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
           <Cart 
             cartItems={cart}
             checkoutPhase={checkoutPhase}

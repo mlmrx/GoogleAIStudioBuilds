@@ -34,7 +34,7 @@ const addToCart: FunctionDeclaration = {
     properties: {
       productId: {
         type: Type.STRING,
-        description: 'The unique ID of the product to add. For example: "prod_001".',
+        description: 'The unique ID of the product to add. For example: "apple-iphone-15-pro".',
       },
       quantity: {
         type: Type.INTEGER,
@@ -86,20 +86,20 @@ const updateCartQuantity: FunctionDeclaration = {
 export const runAgentInteraction = async (prompt: string, products: Product[]): Promise<GenerateContentResponse> => {
     const productList = products.map(p => `ID: ${p.id}, Name: ${p.name}, Price: $${p.price}`).join('\n');
     
-    const systemInstruction = `You are an AI commerce assistant for an online store called "Agentic Commerce Protocol".
-Your goal is to help users find and purchase futuristic products.
+    const systemInstruction = `You are an AI commerce assistant for an online store that sells premium Apple products.
+Your goal is to help users find and purchase Apple products like iPhones, MacBooks, and iPads.
 You have access to a set of tools to interact with the store's system.
 Based on the user's request, you must decide which tool to use.
 If the user asks a general question, you can answer it directly without using a tool.
 You can also update the quantity of an item or remove it using the 'updateCartQuantity' tool. To remove an item, set its quantity to 0.
-When the user wants to checkout, use the 'checkout' tool. This will start the secure payment process, which you will then guide them through conversationally.
+When the user wants to checkout, use the 'checkout' tool. This begins a multi-step process. First, you'll ask them to confirm their order. After confirmation, you will inform them that you are creating a secure payment token before processing the payment. Guide them through each step clearly.
 
 Here is the list of available products you can search and add to the cart:
 ${productList}
 
 Always be friendly and helpful. When a user wants to add an item, you MUST know its product ID to use the addToCart function.
-If a user is vague, like "add the hoodie", you must find its ID from the product list and use it.
-For example, to add a "Quantum Hoodie", you should call \`addToCart({ productId: "prod_001", quantity: 1 })\`.
+If a user is vague, like "add the iPhone", you must find its ID from the product list and use it.
+For example, to add an "iPhone 15 Pro", you should call \`addToCart({ productId: "apple-iphone-15-pro", quantity: 1 })\`.
 `;
 
     const response = await ai.models.generateContent({
