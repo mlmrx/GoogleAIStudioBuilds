@@ -1,0 +1,5 @@
+{
+  "name": "Agentic Commerce Protocol",
+  "description": "An AI-powered shopping experience where users interact with a commerce agent to browse products, manage a shopping cart, and simulate checkout using natural language commands, powered by the Gemini API.",
+  "requestFramePermissions": []
+}
