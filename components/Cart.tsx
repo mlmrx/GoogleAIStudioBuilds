@@ -10,6 +10,8 @@ interface CartProps {
   onConfirmAndPay: () => void;
   onCancelCheckout: () => void;
   onStartNewOrder: () => void;
+  onIncreaseQuantity: (productId: string) => void;
+  onDecreaseQuantity: (productId: string) => void;
 }
 
 const Cart: React.FC<CartProps> = ({ 
@@ -19,7 +21,9 @@ const Cart: React.FC<CartProps> = ({
   onInitiateCheckout,
   onConfirmAndPay,
   onCancelCheckout,
-  onStartNewOrder
+  onStartNewOrder,
+  onIncreaseQuantity,
+  onDecreaseQuantity
 }) => {
   const total = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
@@ -90,14 +94,29 @@ const Cart: React.FC<CartProps> = ({
               <div className="flex-1 overflow-y-auto pr-2 -mr-2">
                 <div className="space-y-3">
                   {cartItems.map(item => (
-                    <div key={item.productId} className={`flex justify-between items-center bg-slate-800 p-2 rounded-md transition-opacity ${isConfirming ? 'opacity-70' : ''}`}>
-                      <div>
-                        <p className="font-semibold text-white">{item.name}</p>
-                        <p className="text-sm text-slate-400">
-                          {item.quantity} x ${item.price.toFixed(2)}
-                        </p>
+                    <div key={item.productId} className={`bg-slate-800 p-2 rounded-md transition-all ${isConfirming ? 'opacity-60' : ''}`}>
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-semibold text-white">{item.name}</p>
+                          <p className="text-xs text-slate-400">${item.price.toFixed(2)} each</p>
+                        </div>
+                        <p className="font-bold text-cyan-400">${(item.quantity * item.price).toFixed(2)}</p>
                       </div>
-                      <p className="font-bold text-cyan-400">${(item.quantity * item.price).toFixed(2)}</p>
+                      <div className="flex items-center justify-end gap-2 mt-1">
+                        <button
+                          onClick={() => onDecreaseQuantity(item.productId)}
+                          disabled={isConfirming}
+                          className="w-7 h-7 bg-slate-700 rounded-md flex items-center justify-center text-lg hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                          aria-label={`Decrease quantity of ${item.name}`}
+                        >-</button>
+                        <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
+                        <button
+                          onClick={() => onIncreaseQuantity(item.productId)}
+                          disabled={isConfirming}
+                          className="w-7 h-7 bg-slate-700 rounded-md flex items-center justify-center text-lg hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                          aria-label={`Increase quantity of ${item.name}`}
+                        >+</button>
+                      </div>
                     </div>
                   ))}
                 </div>

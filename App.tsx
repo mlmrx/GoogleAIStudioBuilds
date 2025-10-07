@@ -80,6 +80,52 @@ const App: React.FC = () => {
     return "Great! Please review your order in the cart panel and click 'Confirm & Pay' to proceed.";
   };
 
+  const handleUpdateCartQuantity = (productId: string, quantity: number): string => {
+    if (checkoutPhase !== 'browsing') {
+      return "You can't modify the cart while a checkout is in progress.";
+    }
+    const product = products.find(p => p.id === productId);
+    if (!product) {
+      return `I couldn't find a product with ID ${productId}.`;
+    }
+    const itemInCart = cart.find(item => item.productId === productId);
+    if (!itemInCart) {
+        return `Product "${product.name}" is not in the cart.`;
+    }
+    
+    if (quantity > 0) {
+      setCart(prevCart => prevCart.map(item =>
+        item.productId === productId ? { ...item, quantity } : item
+      ));
+      return `Updated "${product.name}" quantity to ${quantity}.`;
+    } else {
+      setCart(prevCart => prevCart.filter(item => item.productId !== productId));
+      return `Removed "${product.name}" from the cart.`;
+    }
+  };
+
+  const handleIncreaseQuantity = (productId: string) => {
+    if (checkoutPhase !== 'browsing') return;
+    setCart(prevCart => {
+      return prevCart.map(item =>
+        item.productId === productId ? { ...item, quantity: item.quantity + 1 } : item
+      );
+    });
+  };
+
+  const handleDecreaseQuantity = (productId: string) => {
+    if (checkoutPhase !== 'browsing') return;
+    setCart(prevCart => {
+      const item = prevCart.find(i => i.productId === productId);
+      if (item && item.quantity <= 1) {
+        return prevCart.filter(i => i.productId !== productId);
+      }
+      return prevCart.map(item =>
+        item.productId === productId ? { ...item, quantity: item.quantity - 1 } : item
+      );
+    });
+  };
+
   const handleConfirmAndPay = () => {
     setCheckoutPhase('processing');
     addAgentMessage("Thank you. I'm now securely processing your payment with the merchant. This may take a moment.");
@@ -136,7 +182,9 @@ const App: React.FC = () => {
           case 'checkout':
             agentResponse = handleInitiateCheckout();
             break;
-
+          case 'updateCartQuantity':
+            agentResponse = handleUpdateCartQuantity(call.args.productId, call.args.quantity);
+            break;
           default:
             agentResponse = `Unknown function call: ${call.name}`;
         }
@@ -176,6 +224,8 @@ const App: React.FC = () => {
             onConfirmAndPay={handleConfirmAndPay}
             onCancelCheckout={handleCancelCheckout}
             onStartNewOrder={handleStartNewOrder}
+            onIncreaseQuantity={handleIncreaseQuantity}
+            onDecreaseQuantity={handleDecreaseQuantity}
           />
         </div>
       </main>

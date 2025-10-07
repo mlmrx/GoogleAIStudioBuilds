@@ -63,6 +63,25 @@ const checkout: FunctionDeclaration = {
   },
 };
 
+const updateCartQuantity: FunctionDeclaration = {
+  name: 'updateCartQuantity',
+  description: 'Updates the quantity of a specific product in the cart. Setting quantity to 0 removes the item.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      productId: {
+        type: Type.STRING,
+        description: 'The unique ID of the product to update.',
+      },
+      quantity: {
+        type: Type.INTEGER,
+        description: 'The new quantity for the product. If 0, the item is removed.',
+      },
+    },
+    required: ['productId', 'quantity'],
+  },
+};
+
 
 export const runAgentInteraction = async (prompt: string, products: Product[]): Promise<GenerateContentResponse> => {
     const productList = products.map(p => `ID: ${p.id}, Name: ${p.name}, Price: $${p.price}`).join('\n');
@@ -72,6 +91,7 @@ Your goal is to help users find and purchase futuristic products.
 You have access to a set of tools to interact with the store's system.
 Based on the user's request, you must decide which tool to use.
 If the user asks a general question, you can answer it directly without using a tool.
+You can also update the quantity of an item or remove it using the 'updateCartQuantity' tool. To remove an item, set its quantity to 0.
 When the user wants to checkout, use the 'checkout' tool. This will start the secure payment process, which you will then guide them through conversationally.
 
 Here is the list of available products you can search and add to the cart:
@@ -87,7 +107,7 @@ For example, to add a "Quantum Hoodie", you should call \`addToCart({ productId:
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
             systemInstruction,
-            tools: [{ functionDeclarations: [searchProducts, addToCart, getCart, checkout] }],
+            tools: [{ functionDeclarations: [searchProducts, addToCart, getCart, checkout, updateCartQuantity] }],
         },
     });
 
