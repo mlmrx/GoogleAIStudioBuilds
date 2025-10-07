@@ -1,237 +1,207 @@
 import React, { useState, useEffect } from 'react';
-import { Product, CartItem, ChatMessage, CheckoutPhase, Order } from './types';
+import { ChatMessage, CartItem, Product, CheckoutPhase, Order } from './types';
 import { PRODUCTS } from './constants';
-import { runAgentInteraction } from './services/geminiService';
+import * as geminiService from './services/geminiService';
 import Header from './components/Header';
 import ProductGrid from './components/ProductGrid';
 import AgentPanel from './components/AgentPanel';
 import Cart from './components/Cart';
+import { Part } from '@google/genai';
 
 const App: React.FC = () => {
-  const [products] = useState<Product[]>(PRODUCTS);
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>(PRODUCTS);
-  const [cart, setCart] = useState<CartItem[]>([]);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [displayedProducts, setDisplayedProducts] = useState<Product[]>(PRODUCTS);
   const [checkoutPhase, setCheckoutPhase] = useState<CheckoutPhase>('browsing');
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    setChatHistory([{ 
-      sender: 'agent', 
-      content: "Welcome. I'm your personal shopping assistant for Apple products. How can I help you find the perfect device today? You can ask me to find products, add them to your cart, or view your cart." 
-    }]);
+    geminiService.startChatSession();
+    setChatHistory([{ sender: 'agent', content: "Hello! I'm your AI shopping assistant. How can I help you find the perfect Apple product today?" }]);
   }, []);
 
-  const addAgentMessage = (content: string) => {
-    setChatHistory(prev => [...prev, { sender: 'agent', content }]);
+  // Tool implementations
+  const handleSearchProducts = (args: { query?: string; category?: string }): Product[] => {
+    let filtered = PRODUCTS;
+    if (args.category) {
+      filtered = filtered.filter(p => p.category.toLowerCase() === args.category!.toLowerCase());
+    }
+    if (args.query) {
+      const lowerQuery = args.query.toLowerCase();
+      filtered = filtered.filter(p =>
+        p.name.toLowerCase().includes(lowerQuery) ||
+        p.description.toLowerCase().includes(lowerQuery)
+      );
+    }
+    setDisplayedProducts(filtered);
+    return filtered;
   };
 
-  const handleSearchProducts = (query: string, maxPrice?: number): string => {
-    let results = [...products];
-    if (query) {
-      results = results.filter(p => p.name.toLowerCase().includes(query.toLowerCase()) || p.description.toLowerCase().includes(query.toLowerCase()));
-    }
-    if (maxPrice) {
-      results = results.filter(p => p.price <= maxPrice);
-    }
-    setFilteredProducts(results);
-    if (results.length > 0) {
-      return `I found ${results.length} products matching your criteria. I've updated the product list for you.`;
-    }
-    return "I couldn't find any products matching your criteria. Please try a different search.";
-  };
-
-  const handleAddToCart = (productId: string, quantity: number): string => {
-    if (checkoutPhase !== 'browsing') {
-      return "You can't add items to the cart while a checkout is in progress.";
-    }
-    const product = products.find(p => p.id === productId);
+  const handleAddToCart = (args: { productId: string; quantity?: number }): { success: boolean, message: string } => {
+    const product = PRODUCTS.find(p => p.id === args.productId);
     if (!product) {
-      return `I couldn't find a product with ID ${productId}.`;
+      return { success: false, message: `Product with ID ${args.productId} not found.` };
     }
-
-    setCart(prevCart => {
-      const existingItem = prevCart.find(item => item.productId === productId);
+    const quantity = args.quantity || 1;
+    setCartItems(prev => {
+      const existingItem = prev.find(item => item.productId === args.productId);
       if (existingItem) {
-        return prevCart.map(item =>
-          item.productId === productId ? { ...item, quantity: item.quantity + quantity } : item
-        );
+        return prev.map(item => item.productId === args.productId ? { ...item, quantity: item.quantity + quantity } : item);
+      } else {
+        return [...prev, { productId: args.productId, name: product.name, price: product.price, quantity }];
       }
-      return [...prevCart, { productId, name: product.name, price: product.price, quantity }];
     });
-    return `Successfully added ${quantity} of "${product.name}" to your cart.`;
+    return { success: true, message: `Added ${quantity} of ${product.name} to the cart.` };
   };
 
-  const handleGetCart = (): string => {
-    if (cart.length === 0) {
-      return "Your cart is currently empty.";
-    }
-    const cartDetails = cart.map(item => `${item.quantity}x ${item.name}`).join(', ');
-    const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0).toFixed(2);
-    return `Your cart contains: ${cartDetails}. The total is $${total}.`;
+  const handleViewCart = (): CartItem[] => {
+    return cartItems;
   };
 
-  const handleInitiateCheckout = (): string => {
-    if (cart.length === 0) {
-      return "There is nothing in your cart to checkout.";
+  const handleInitiateCheckout = (): { success: boolean, message: string } => {
+    if (cartItems.length > 0) {
+      setCheckoutPhase('confirming');
+      return { success: true, message: "Proceeding to checkout. Please confirm your order." };
     }
-    setCheckoutPhase('confirming');
-    return "Great! Please review your order in the cart panel and click 'Confirm & Pay' to proceed.";
+    return { success: false, message: "Your cart is empty." };
   };
 
-  const handleUpdateCartQuantity = (productId: string, quantity: number): string => {
-    if (checkoutPhase !== 'browsing') {
-      return "You can't modify the cart while a checkout is in progress.";
+  const handleConfirmAndPay = (): { success: boolean, message: string } => {
+    if (cartItems.length === 0) {
+      return { success: false, message: "Cannot checkout with an empty cart." };
     }
-    const product = products.find(p => p.id === productId);
-    if (!product) {
-      return `I couldn't find a product with ID ${productId}.`;
-    }
-    const itemInCart = cart.find(item => item.productId === productId);
-    if (!itemInCart) {
-        return `Product "${product.name}" is not in the cart.`;
-    }
-    
-    if (quantity > 0) {
-      setCart(prevCart => prevCart.map(item =>
-        item.productId === productId ? { ...item, quantity } : item
-      ));
-      return `Updated "${product.name}" quantity to ${quantity}.`;
-    } else {
-      setCart(prevCart => prevCart.filter(item => item.productId !== productId));
-      return `Removed "${product.name}" from the cart.`;
-    }
-  };
-
-  const handleIncreaseQuantity = (productId: string) => {
-    if (checkoutPhase !== 'browsing') return;
-    setCart(prevCart => {
-      return prevCart.map(item =>
-        item.productId === productId ? { ...item, quantity: item.quantity + 1 } : item
-      );
-    });
-  };
-
-  const handleDecreaseQuantity = (productId: string) => {
-    if (checkoutPhase !== 'browsing') return;
-    setCart(prevCart => {
-      const item = prevCart.find(i => i.productId === productId);
-      if (item && item.quantity <= 1) {
-        return prevCart.filter(i => i.productId !== productId);
-      }
-      return prevCart.map(item =>
-        item.productId === productId ? { ...item, quantity: item.quantity - 1 } : item
-      );
-    });
-  };
-
-  const handleConfirmAndPay = () => {
     setCheckoutPhase('authorizing');
-    addAgentMessage("Thank you. To protect your payment details, I'm now creating a secure, single-use token for this transaction. This is part of the Agentic Commerce Protocol.");
-
     setTimeout(() => {
       setCheckoutPhase('processing');
-      addAgentMessage("Secure token created. I'm now processing your payment with the merchant. This may take a moment.");
-      
       setTimeout(() => {
-        const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
         const order: Order = {
-          id: `ACP-${Date.now()}`,
-          items: [...cart],
-          total,
+          id: `ORD-${Date.now()}`,
+          items: [...cartItems],
+          total: cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0),
           date: new Date(),
         };
         setCompletedOrder(order);
         setCheckoutPhase('complete');
-        addAgentMessage(`Success! Your payment is complete. Your order #${order.id} has been confirmed. Thank you for your purchase!`);
-        setCart([]);
-      }, 2500);
-    }, 2000);
-  };
-  
-  const handleCancelCheckout = () => {
-    setCheckoutPhase('browsing');
-    addAgentMessage("No problem, the checkout has been cancelled. You can continue shopping.");
+        setCartItems([]);
+      }, 2000);
+    }, 1500);
+    return { success: true, message: "Payment authorized. Processing your order now." };
   };
 
-  const handleStartNewOrder = () => {
+  const handleCancelCheckout = (): { success: boolean, message: string } => {
     setCheckoutPhase('browsing');
-    setCompletedOrder(null);
-    setFilteredProducts(PRODUCTS);
-    addAgentMessage("What would you like to find next?");
+    return { success: true, message: "Checkout cancelled." };
   };
 
-  const handleUserMessage = async (message: string) => {
-    setChatHistory(prev => [...prev, { sender: 'user', content: message }]);
+  const handleSendMessage = async (message: string) => {
+    const newUserMessage: ChatMessage = { sender: 'user', content: message };
+    setChatHistory(prev => [...prev, newUserMessage]);
     setIsLoading(true);
 
     try {
-      const result = await runAgentInteraction(message, products);
-      let agentResponse = "I'm sorry, I couldn't process that request. Could you try rephrasing it?";
-      
-      if (result.functionCalls && result.functionCalls.length > 0) {
-        const call = result.functionCalls[0];
-        console.log("Agent wants to call function:", call);
+      let response = await geminiService.sendMessage(message);
 
-        switch (call.name) {
-          case 'searchProducts':
-            agentResponse = handleSearchProducts(call.args.query, call.args.maxPrice);
-            break;
-          case 'addToCart':
-            agentResponse = handleAddToCart(call.args.productId, call.args.quantity);
-            break;
-          case 'getCart':
-            agentResponse = handleGetCart();
-            break;
-          case 'checkout':
-            agentResponse = handleInitiateCheckout();
-            break;
-          case 'updateCartQuantity':
-            agentResponse = handleUpdateCartQuantity(call.args.productId, call.args.quantity);
-            break;
-          default:
-            agentResponse = `Unknown function call: ${call.name}`;
+      const functionCalls = response.functionCalls;
+      if (functionCalls && functionCalls.length > 0) {
+        const toolResults: Part[] = [];
+
+        for (const call of functionCalls) {
+          const { name, args } = call;
+          let result: any;
+          switch (name) {
+            case 'searchProducts':
+              result = handleSearchProducts(args as any);
+              break;
+            case 'addToCart':
+              result = handleAddToCart(args as any);
+              break;
+            case 'viewCart':
+              result = handleViewCart();
+              break;
+            case 'initiateCheckout':
+              result = handleInitiateCheckout();
+              break;
+            case 'confirmAndPay':
+              result = handleConfirmAndPay();
+              break;
+            case 'cancelCheckout':
+              result = handleCancelCheckout();
+              break;
+            default:
+              result = { error: 'Unknown function' };
+          }
+          toolResults.push({ functionResponse: { name, response: { result } } });
         }
-      } else if(result.text) {
-        agentResponse = result.text;
+        response = await geminiService.sendMessage(toolResults);
       }
-      
-      addAgentMessage(agentResponse);
+
+      if (response.text) {
+        const newAgentMessage: ChatMessage = { sender: 'agent', content: response.text.trim() };
+        setChatHistory(prev => [...prev, newAgentMessage]);
+      }
     } catch (error) {
-      console.error("Error processing agent interaction:", error);
-      addAgentMessage('An error occurred. Please try again.');
+      console.error("Error communicating with agent:", error);
+      const errorMessage: ChatMessage = { sender: 'agent', content: "Sorry, I'm having trouble connecting. Please try again later." };
+      setChatHistory(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleIncreaseQuantity = (productId: string) => {
+    setCartItems(prev => prev.map(item => item.productId === productId ? { ...item, quantity: item.quantity + 1 } : item));
+  };
+  
+  const handleDecreaseQuantity = (productId: string) => {
+    setCartItems(prev => {
+        const item = prev.find(item => item.productId === productId);
+        if (item && item.quantity > 1) {
+            return prev.map(i => i.productId === productId ? { ...i, quantity: i.quantity - 1 } : i);
+        }
+        return prev.filter(i => i.productId !== productId);
+    });
+  };
+
+  const handleStartNewOrder = () => {
+    setCompletedOrder(null);
+    setCheckoutPhase('browsing');
+    setDisplayedProducts(PRODUCTS);
+    setChatHistory([{ sender: 'agent', content: "Welcome back! What can I help you find?" }]);
+  };
+
   return (
-    <div className="bg-gray-100 text-gray-800 min-h-screen font-sans">
+    <div className="bg-gray-50 min-h-screen font-sans">
       <Header />
-      <main className="container mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-80px)]">
-        <div className="lg:col-span-4 xl:col-span-3 h-full overflow-y-auto bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-          <ProductGrid products={filteredProducts} />
-        </div>
-        <div className="lg:col-span-5 xl:col-span-6 h-full flex flex-col bg-white border border-gray-200 rounded-xl shadow-sm">
-          <AgentPanel 
-            chatHistory={chatHistory} 
-            onSendMessage={handleUserMessage} 
-            isLoading={isLoading} 
-          />
-        </div>
-        <div className="lg:col-span-3 xl:col-span-3 h-full overflow-y-auto bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-          <Cart 
-            cartItems={cart}
-            checkoutPhase={checkoutPhase}
-            completedOrder={completedOrder}
-            onInitiateCheckout={handleInitiateCheckout}
-            onConfirmAndPay={handleConfirmAndPay}
-            onCancelCheckout={handleCancelCheckout}
-            onStartNewOrder={handleStartNewOrder}
-            onIncreaseQuantity={handleIncreaseQuantity}
-            onDecreaseQuantity={handleDecreaseQuantity}
-          />
+      <main className="container mx-auto p-4 lg:p-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+          <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div className="md:col-span-2 xl:col-span-3">
+              <ProductGrid products={displayedProducts} />
+            </div>
+          </div>
+          <div className="lg:col-span-1 lg:sticky lg:top-24 space-y-6">
+            <div className="h-[60vh] min-h-[400px] max-h-[700px] border border-gray-200 rounded-xl shadow-sm">
+                <AgentPanel
+                    chatHistory={chatHistory}
+                    onSendMessage={handleSendMessage}
+                    isLoading={isLoading}
+                />
+            </div>
+            <div className="p-4 bg-white border border-gray-200 rounded-xl shadow-sm h-[400px]">
+                <Cart 
+                    cartItems={cartItems}
+                    checkoutPhase={checkoutPhase}
+                    completedOrder={completedOrder}
+                    onInitiateCheckout={handleInitiateCheckout}
+                    onConfirmAndPay={handleConfirmAndPay}
+                    onCancelCheckout={handleCancelCheckout}
+                    onStartNewOrder={handleStartNewOrder}
+                    onIncreaseQuantity={handleIncreaseQuantity}
+                    onDecreaseQuantity={handleDecreaseQuantity}
+                />
+            </div>
+          </div>
         </div>
       </main>
     </div>
